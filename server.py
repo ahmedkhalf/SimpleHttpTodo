@@ -9,21 +9,17 @@ What I cannot create, I do not understand
 Warning!: spaghetti & un-extensible code, mainly just for learning
 """
 
-
-import socket
-import threading
-import os
-from getpass import getpass
-import json
-import traceback
-import select
 import html
+import json
+import select
+import signal
+import sys
+import socket
 
 
-
+# server setup
 SERVER_HOST = "0.0.0.0"
 SERVER_PORT = 80
-
 
 server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -37,22 +33,12 @@ server_socket.listen(1)
 print("-> Listening...")
 
 
-# This is a hack to handle Ctrl-c on windows...
-# This is because blocking socket functions don't receive the SIGINT signal
-def stop_loop(func):
-    while True:
-        while True:
-            try:
-                getpass("")
-            except (KeyboardInterrupt, Exception) as _:
-                print("-> Attempt to gracefully quit...")
-                try:
-                    func()
-                except Exception as e:
-                    traceback.print_exception(e)
-                    break
-                os._exit(0)
-threading.Thread(target=stop_loop, args=(server_socket.close,), daemon=True).start()
+def gracefully_quit(*_):
+    print("-> Attempt to gracefully quit...")
+    server_socket.close()
+    sys.exit(0)
+
+signal.signal(signal.SIGINT, gracefully_quit)
 
 
 # Server state
@@ -64,6 +50,9 @@ tasks_html = ""
 
 # The event loop
 while True:
+    ready = False
+    while not ready:  # handles ctrl-c every 0.2 seconds on windows...
+        ready, _, _ = select.select([server_socket], [], [], 0.2)
     client_connection, client_address = server_socket.accept()
     print(f"-> New connection from {client_address[0]}:{client_address[1]}")
 
